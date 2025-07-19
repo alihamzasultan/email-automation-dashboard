@@ -1,5 +1,5 @@
 import { LinkProps } from '@tanstack/react-router'
-
+import { ElementType } from 'react'
 interface User {
   name: string
   email: string
@@ -8,7 +8,7 @@ interface User {
 
 interface Team {
   name: string
-  logo: string
+  logo: string | ElementType
   plan: string
 }
 
