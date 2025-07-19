@@ -1,26 +1,26 @@
 import {
-  IconBarrierBlock,
-  IconBrowserCheck,
-  IconBug,
+  // IconBarrierBlock,
+  // IconBrowserCheck,
+  // IconBug,
   IconChecklist,
-  IconError404,
-  IconHelp,
+  // IconError404,
+  // IconHelp,
   IconLayoutDashboard,
-  IconLock,
-  IconLockAccess,
-  IconMessages,
-  IconNotification,
-  IconPackages,
-  IconPalette,
-  IconServerOff,
-  IconSettings,
-  IconTool,
-  IconUserCog,
-  IconUserOff,
-  IconUsers,
+  // IconLock,
+  // IconLockAccess,
+  // IconMessages,
+  // IconNotification,
+  // IconPackages,
+  // IconPalette,
+  // IconServerOff,
+  // IconSettings,
+  // IconTool,
+  // IconUserCog,
+  // IconUserOff,
+  // IconUsers,
 } from '@tabler/icons-react'
 import { AudioWaveform, GalleryVerticalEnd } from 'lucide-react'
-import { ClerkLogo } from '@/assets/clerk-logo'
+// import { ClerkLogo } from '@/assets/clerk-logo'
 import { type SidebarData } from '../types'
 import IceButcherLogo from '@/assets/icebutcherlogomi-1.webp'
 
