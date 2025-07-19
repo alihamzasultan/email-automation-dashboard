@@ -9,22 +9,23 @@ import { DataTable } from './components/data-table'
 import { TasksDialogs } from './components/tasks-dialogs'
 import { TasksPrimaryButtons } from './components/tasks-primary-buttons'
 import TasksProvider from './context/tasks-context'
+import { API_URL } from '@/context/api'
 
 export default function Tasks() {
   const [emails, setEmails] = useState<any[]>([]);
   const [isFetching, setIsFetching] = useState(false); // Renamed from isLoading to be more specific
 
+
   const fetchEmails = async () => {
-    if (isFetching) return; // Prevent concurrent fetches
-    
+    if (isFetching) return;
+  
     setIsFetching(true);
     try {
-      const response = await fetch('http://localhost:5000/api/emails');
+      const response = await fetch(`${API_URL}/emails`);
       if (!response.ok) throw new Error('Failed to fetch emails');
-      
+  
       const newEmails = await response.json();
-      
-      // Append new emails to existing ones, avoiding duplicates
+  
       setEmails(prevEmails => {
         const existingIds = new Set(prevEmails.map(email => email.id));
         const uniqueNewEmails = newEmails.filter((email: any) => !existingIds.has(email.id));
