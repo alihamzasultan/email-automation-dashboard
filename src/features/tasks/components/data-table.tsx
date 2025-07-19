@@ -23,7 +23,6 @@ import {
 } from '@/components/ui/table'
 import { DataTablePagination } from '../components/data-table-pagination'
 import { DataTableToolbar } from '../components/data-table-toolbar'
-import { Skeleton } from '@/components/ui/skeleton' // Import skeleton component
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
@@ -94,11 +93,7 @@ export function DataTable<TData, TValue>({
               // Loading state
               Array.from({ length: 5 }).map((_, index) => (
                 <TableRow key={`skeleton-${index}`}>
-                  {columns.map((column, colIndex) => (
-                    <TableCell key={`skeleton-cell-${index}-${colIndex}`}>
-                      <Skeleton className="h-4 w-[100px]" />
-                    </TableCell>
-                  ))}
+
                 </TableRow>
               ))
             ) : table.getRowModel().rows?.length ? (
