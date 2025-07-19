@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { useState } from 'react'
 import axios from 'axios'
+import { API_URL } from '@/context/api'
+
 
 interface Props {
   open: boolean
@@ -32,26 +34,29 @@ export function TasksMutateDrawer({ open, onOpenChange, currentRow }: Props) {
   const [loading, setLoading] = useState(false)
   const [showEditor, setShowEditor] = useState(false)
 
+
   const handleGenerateReply = async () => {
-    if (!currentRow?.body) return
-    console.log(currentRow.body)
-    setLoading(true)
+    if (!currentRow?.body) return;
+    console.log(currentRow.body);
+    setLoading(true);
     try {
-      const res = await axios.post('http://localhost:5000/api/reply', {
-        body: currentRow.body  // Changed from 'email' to 'body'
-      })
-      setAiReply(res.data.reply)
-      setShowEditor(true)
+      const res = await axios.post(`${API_URL}/reply`, {
+        body: currentRow.body,
+      });
+      setAiReply(res.data.reply);
+      setShowEditor(true);
     } catch (err) {
-      console.error('Error generating AI reply:', err)
-      alert('Failed to generate reply. Please try again.')
+      console.error('Error generating AI reply:', err);
+      alert('Failed to generate reply. Please try again.');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
+  
+
   const handleSendReply = async () => {
     try {
-      const response = await axios.post('http://localhost:5000/api/send', {
+      const response = await axios.post(`${API_URL}/send`, {
         to: currentRow?.email,
         reply: aiReply,
         subject: `Re: ${currentRow?.title || "Your email"}`
@@ -63,15 +68,16 @@ export function TasksMutateDrawer({ open, onOpenChange, currentRow }: Props) {
   
       console.log('Email sent to:', currentRow?.email);
       console.log('Response from server:', response.data);
-      
+  
       alert('Reply sent successfully!');
       setShowEditor(false);
       setAiReply('');
-      
     } catch (err) {
-      
+      console.error('Failed to send email:', err);
+      alert('Failed to send reply. Please try again.');
     }
-  }
+  };
+  
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="flex flex-col">
