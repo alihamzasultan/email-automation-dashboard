@@ -140,7 +140,7 @@
 }
 
 @utility no-scrollbar {
-  /* Hide scrollbar for Chrome, Safari and Opera */
+  /* Hide scrollbar for Chrome, Safariand Opera */
   &::-webkit-scrollbar {
     display: none;
   }
