@@ -1,6 +1,6 @@
 import { DotsHorizontalIcon } from '@radix-ui/react-icons'
 import { Row } from '@tanstack/react-table'
-
+import { IconSortDescendingSmallBig } from '@tabler/icons-react';
 import { Button } from '@/components/ui/button'
 import { IconPencil } from '@tabler/icons-react'
 import { IconMailAi } from '@tabler/icons-react';
@@ -48,7 +48,7 @@ export function DataTableRowActions<TData>({
         >
           {email.summary ? 'View Summary' : 'Summarize'}
           <span className='ml-auto'>
-            <IconMailAi size={20} />
+            <IconSortDescendingSmallBig size={20} />
           </span>
         </DropdownMenuItem>
 
