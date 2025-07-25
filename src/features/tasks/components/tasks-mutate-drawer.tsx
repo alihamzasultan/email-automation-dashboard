@@ -124,7 +124,7 @@ export function TasksMutateDrawer({ open, onOpenChange, currentRow }: Props) {
 
           {showEditor && (
             <div className="mt-4 border-t pt-4">
-              <h3 className="text-base font-medium text-foreground mb-2">AI Suggested Reply</h3>
+              <h3 className="text-base font-medium text-foreground mb-2">Reply</h3>
               <Textarea
                 value={aiReply}
                 onChange={(e) => setAiReply(e.target.value)}
