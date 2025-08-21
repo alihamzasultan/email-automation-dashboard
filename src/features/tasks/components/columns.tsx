@@ -11,12 +11,21 @@ import defaultUserImage from '@/assets/user.png'  // alias "@" must be configure
 // Define your classification types and colors (similar to callTypes)
 const classificationTypes = new Map([
   ['urgent', 'bg-destructive/10 dark:bg-destructive/50 text-destructive dark:text-primary border-destructive/10'],
-  ['other', 'bg-gray-300/30 text-purple-foreground'],
+  ['other', 'bg-gray-300/30 text-purple-foreground border-gray-300'],
   ['sales', 'bg-teal-100/30 text-teal-900 dark:text-teal-200 border-teal-200'],
-  ['support', 'bg-neutral-300/40 border-neutral-300'],
+  ['support', 'bg-gray-400/30 text-purple-foreground border-gray-300'],
   ['newsletter', 'bg-sky-200/40 text-sky-900 dark:text-sky-100 border-sky-300'],
   ['complaint','bg-destructive/20 dark:bg-destructive/50 text-destructive dark:text-primary border-destructive/10',
   ],
+])
+const emotionColors = new Map([
+  ['happy', 'bg-green-200 text-green-900 dark:bg-green-700 dark:text-green-100'],
+  ['sad', 'bg-blue-200 text-blue-900 dark:bg-blue-700 dark:text-blue-100'],
+  ['angry', 'bg-red-200 text-red-900 dark:bg-red-700 dark:text-red-100'],
+  ['frustrated', 'bg-orange-200 text-orange-900 dark:bg-orange-700 dark:text-orange-100'],
+  ['thankful', 'bg-yellow-200 text-yellow-900 dark:bg-yellow-700 dark:text-yellow-100'],
+  ['excited', 'bg-pink-200 text-pink-900 dark:bg-pink-700 dark:text-pink-100'],
+  ['neutral', 'bg-gray-200 text-gray-900 dark:bg-gray-700 dark:text-gray-100'],
 ])
 
 export type Email = {
@@ -31,6 +40,7 @@ export type Email = {
   sender_image?: string
   sender_name?: string 
   replyMode?: 'ai' | 'manual'
+  emotion:string
   
 }
 
@@ -125,7 +135,7 @@ export const columns: ColumnDef<Email>[] = [
   {
     id: 'content',
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} title='Content' />
+      <DataTableColumnHeader column={column} title='Email Body' />
     ),
     cell: ({ row }) => {
       const title = row.original.title
@@ -162,7 +172,27 @@ export const columns: ColumnDef<Email>[] = [
       )
     },
   },
+
+  {
+    accessorKey: 'emotion',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='Emotion' />
+    ),
+    cell: ({ row }) => {
+      const emotion = row.getValue('emotion') as string
+      const badgeColor = emotionColors.get(emotion) || emotionColors.get('neutral')
   
+      return (
+        <Badge className={cn('capitalize', badgeColor)}>
+          {emotion || 'neutral'}
+        </Badge>
+      )
+    },
+  },
+  
+
+
+
   // {
   //   accessorKey: 'summary',
   //   header: ({ column }) => (
