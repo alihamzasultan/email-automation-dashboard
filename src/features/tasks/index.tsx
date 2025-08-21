@@ -51,7 +51,7 @@ export default function Tasks() {
 
   useEffect(() => {
     fetchEmails();
-
+  
     const channel = supabase
       .channel('public:emails')
       .on(
@@ -63,11 +63,8 @@ export default function Tasks() {
         },
         (payload) => {
           console.log('New email inserted:', payload.new);
-          setEmails((prev) => {
-            const exists = prev.some((email) => email.id === payload.new.id);
-            if (exists) return prev;
-            return [payload.new, ...prev];
-          });
+          // Instead of manually adding, just refresh everything
+          fetchEmails();
         }
       )
       .on(
@@ -80,27 +77,23 @@ export default function Tasks() {
         (payload) => {
           const oldSummary = payload.old?.summary;
           const newSummary = payload.new?.summary;
-
+  
           if (oldSummary !== newSummary) {
             console.log('Summary column updated:', payload.new);
-            setEmails((prev) =>
-              prev.map((email) =>
-                email.id === payload.new.id ? payload.new : email
-              )
-            );
+            // Optional: directly refresh everything on update
+            fetchEmails();
           }
         }
       )
       .subscribe((status) => {
         console.log('Subscription status:', status);
       });
-
+  
     return () => {
       supabase.removeChannel(channel);
     };
   }, []);
-
-
+  
 
   const classifications = Array.from(new Set(emails.map(email => email.classification))).filter(Boolean);
   // Add this with other state declarations
