@@ -879,7 +879,7 @@ function CircularProgress({
           />
         </svg>
         <div className='absolute flex flex-col items-center justify-center'>
-          <div className='h-6 w-6'>{icon}</div>
+          
           <span className='text-base font-bold'>{`${percentage.toFixed(0)}%`}</span>
         </div>
       </div>
