@@ -45,7 +45,7 @@ function formatBotResponse(text: string): string {
   // 1. Convert Markdown images ![alt](url) to responsive <img> tags with Tailwind classes
   formattedText = formattedText.replace(
     /!\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g,
-    (match, altText, imageUrl) => {
+    (altText, imageUrl) => {
       return `<img src="${imageUrl}" alt="${altText}" class="my-2 max-w-full rounded-lg shadow-md h-auto" />`
     }
   )
