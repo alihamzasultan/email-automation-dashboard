@@ -879,13 +879,95 @@ function CircularProgress({
           />
         </svg>
         <div className='absolute flex flex-col items-center justify-center'>
-          
           <span className='text-base font-bold'>{`${percentage.toFixed(0)}%`}</span>
         </div>
       </div>
       <p className='max-w-[80px] truncate text-xs font-medium capitalize text-muted-foreground'>
         {name}
       </p>
+    </div>
+  )
+}
+
+// ===== NEW: Tip Data and Component =====
+const salesTips = [
+  "Always listen more than you talk. You'll learn what the customer truly needs.",
+  'Know your product inside and out. Confidence comes from competence.',
+  'Follow up promptly. A quick, thoughtful follow-up can make all the difference.',
+  'Focus on building relationships, not just making a sale. Long-term trust is invaluable.',
+  'Ask open-ended questions to encourage conversation and uncover pain points.',
+  "Understand your customer's business. How can your product specifically help them succeed?",
+  'Handle objections with empathy. Acknowledge their concern before offering a solution.',
+  "Use the 'feel, felt, found' method for objections: 'I understand how you feel. Others have felt the same way. What they found was...'",
+  'Set clear goals for every sales call. What do you want to achieve?',
+  "Don't be afraid to ask for the sale. Be direct and confident.",
+]
+
+function TipPopup() {
+  const [currentTipIndex, setCurrentTipIndex] = React.useState(0)
+  const [isVisible, setIsVisible] = React.useState(true)
+
+  React.useEffect(() => {
+    const intervalId = setInterval(() => {
+      setCurrentTipIndex((prevIndex) => (prevIndex + 1) % salesTips.length)
+    }, 60000) // 60 seconds
+
+    return () => clearInterval(intervalId)
+  }, [])
+
+  if (!isVisible) {
+    return null
+  }
+
+  return (
+    <div className='fixed bottom-4 right-4 z-50 w-full max-w-sm rounded-lg border bg-card p-4 text-card-foreground shadow-lg animate-in fade-in-90 slide-in-from-bottom-10'>
+      <div className='flex items-start justify-between'>
+        <div className='flex items-center gap-3'>
+          <svg
+            xmlns='http://www.w3.org/2000/svg'
+            width='24'
+            height='24'
+            viewBox='0 0 24 24'
+            fill='none'
+            stroke='currentColor'
+            strokeWidth='2'
+            strokeLinecap='round'
+            strokeLinejoin='round'
+            className='h-6 w-6 flex-shrink-0 text-yellow-400'
+          >
+            <path d='M15 14c.2-1 .7-1.7 1.5-2.5C17.7 10.2 18 9 18 7.5a6 6 0 0 0-12 0c0 1.5.3 2.7 1.5 3.9.8.8 1.3 1.5 1.5 2.5' />
+            <path d='M9 18h6' />
+            <path d='M10 22h4' />
+          </svg>
+          <div>
+            <h4 className='font-semibold'>Sales Tip</h4>
+            <p className='mt-1 text-sm text-muted-foreground'>
+              {salesTips[currentTipIndex]}
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => setIsVisible(false)}
+          className='-m-1 ml-2 rounded-md p-1 text-muted-foreground opacity-70 transition-opacity hover:bg-muted hover:opacity-100'
+          aria-label='Close tip'
+        >
+          <svg
+            xmlns='http://www.w3.org/2000/svg'
+            width='24'
+            height='24'
+            viewBox='0 0 24 24'
+            fill='none'
+            stroke='currentColor'
+            strokeWidth='2'
+            strokeLinecap='round'
+            strokeLinejoin='round'
+            className='h-4 w-4'
+          >
+            <path d='M18 6 6 18' />
+            <path d='m6 6 12 12' />
+          </svg>
+        </button>
+      </div>
     </div>
   )
 }
@@ -1144,6 +1226,7 @@ export default function Dashboard() {
           </TabsContent>
         </Tabs>
       </Main>
+      <TipPopup />
     </>
   )
 }
