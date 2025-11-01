@@ -31,6 +31,62 @@ import { ThemeSwitch } from '@/components/theme-switch'
 import { Overview } from './components/overview'
 import { RecentSales } from './components/recent-sales'
 
+// ===== Chatbot Formatting Helpers =====
+
+/**
+ * Parses a raw text response from the bot and converts it into an HTML string.
+ * This function handles Markdown-like syntax for images, links, bold/italic text, etc.
+ * @param text The raw string from the bot.
+ * @returns An HTML string.
+ */
+function formatBotResponse(text: string): string {
+  let formattedText = text
+
+  // 1. Convert Markdown images ![alt](url) to responsive <img> tags with Tailwind classes
+  formattedText = formattedText.replace(
+    /!\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g,
+    (match, altText, imageUrl) => {
+      return `<img src="${imageUrl}" alt="${altText}" class="my-2 max-w-full rounded-lg shadow-md h-auto" />`
+    }
+  )
+
+  // 2. Convert other URLs to clickable <a> tags (that are not part of an image tag)
+  // This regex avoids replacing URLs that are already inside href or src attributes
+  formattedText = formattedText.replace(
+    /(?<!href="|src=")(https?:\/\/[^\s<>"]+)/g,
+    (url) => {
+      // Avoid turning image URLs into links again
+      if (/\.(jpg|jpeg|png|gif)$/i.test(url)) {
+        return url
+      }
+      return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-primary underline hover:text-primary/80">${url}</a>`
+    }
+  )
+
+  // 3. Convert Markdown bold **text** to <strong>
+  formattedText = formattedText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+
+  // 4. Convert line breaks \n to <br> tags for proper spacing in HTML
+  formattedText = formattedText.replace(/\n/g, '<br />')
+
+  return formattedText
+}
+
+/**
+ * A component specifically for rendering a bot's message.
+ * It uses `formatBotResponse` to convert text to HTML and then renders it safely.
+ */
+function BotMessage({ text }: { text: string }) {
+  const formattedHtml = formatBotResponse(text)
+
+  return (
+    <div
+      className='prose prose-sm dark:prose-invert max-w-none'
+      dangerouslySetInnerHTML={{ __html: formattedHtml }}
+    />
+  )
+}
+
 // ===== Data and Components for Chatbot =====
 
 type Message = {
@@ -42,16 +98,8 @@ type Message = {
 function Chatbot() {
   const [messages, setMessages] = React.useState<Message[]>([])
   const [input, setInput] = React.useState('')
+  const [isLoading, setIsLoading] = React.useState(false)
   const messagesEndRef = React.useRef<HTMLDivElement>(null)
-
-  const dummyReplies = [
-    "I'm checking on that for you. One moment...",
-    'Can you provide the customer ID or order number?',
-    'That sounds like a great opportunity! Let me pull up the relevant product information.',
-    'I see. Based on our current inventory, I can suggest an alternative.',
-    'Thank you for the update. I have logged it in the system.',
-    "I'm sorry, I'm just a demo bot and can't process that specific request yet.",
-  ]
 
   // Greet the user on component mount
   React.useEffect(() => {
@@ -69,29 +117,55 @@ function Chatbot() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (input.trim() === '') return
+    if (input.trim() === '' || isLoading) return
 
+    setIsLoading(true)
+    const userMessageText = input
     const newUserMessage: Message = {
       id: Date.now(),
-      text: input,
+      text: userMessageText,
       sender: 'user',
     }
     setMessages((prev) => [...prev, newUserMessage])
     setInput('')
 
-    // Simulate a bot reply after a short delay
-    setTimeout(() => {
-      const randomReply =
-        dummyReplies[Math.floor(Math.random() * dummyReplies.length)]
+    try {
+      const formData = new FormData()
+      formData.append('user_input', userMessageText)
+
+      const response = await fetch(
+        'https://web-production-330a5.up.railway.app/chatbot',
+        {
+          method: 'POST',
+          body: formData,
+        }
+      )
+
+      if (!response.ok) {
+        throw new Error(`Error: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+
       const botReply: Message = {
         id: Date.now() + 1,
-        text: randomReply,
+        text: data.response || "Sorry, I didn't get a valid response.",
         sender: 'bot',
       }
       setMessages((prev) => [...prev, botReply])
-    }, 1200)
+    } catch (error) {
+      console.error('Failed to fetch chatbot reply:', error)
+      const errorReply: Message = {
+        id: Date.now() + 1,
+        text: "I'm sorry, but I'm having trouble connecting to my brain right now. Please try again in a moment.",
+        sender: 'bot',
+      }
+      setMessages((prev) => [...prev, errorReply])
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -103,7 +177,8 @@ function Chatbot() {
         </CardDescription>
       </CardHeader>
       <CardContent className='flex h-[60vh] flex-col'>
-        <ScrollArea className='flex-grow pr-4'>
+        {/* The 'flex-grow' element needs 'min-h-0' to prevent it from overflowing its parent */}
+        <ScrollArea className='flex-grow min-h-0 pr-4'> 
           <div className='space-y-4'>
             {messages.map((message) => (
               <div
@@ -113,48 +188,66 @@ function Chatbot() {
                 }`}
               >
                 {message.sender === 'bot' && (
-                  <Avatar className='h-8 w-8'>
-                    {/* Placeholder for bot avatar */}
+                  <Avatar className='h-8 w-8 self-start'>
                     <AvatarFallback>AI</AvatarFallback>
                   </Avatar>
                 )}
                 <div
-                  className={`max-w-xs rounded-lg px-4 py-2 text-sm lg:max-w-md ${
+                  className={`min-w-0 max-w-xs break-words rounded-lg px-4 py-2 text-sm lg:max-w-md ${
                     message.sender === 'user'
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted'
                   }`}
                 >
-                  {message.text}
+                  {message.sender === 'user' ? (
+                    message.text
+                  ) : (
+                    <BotMessage text={message.text} />
+                  )}
                 </div>
                 {message.sender === 'user' && (
                   <Avatar className='h-8 w-8'>
-                    {/* Placeholder for user avatar */}
                     <AvatarFallback>You</AvatarFallback>
                   </Avatar>
                 )}
               </div>
             ))}
+            {isLoading && (
+              <div className='flex items-end gap-2 justify-start'>
+                <Avatar className='h-8 w-8 self-start'>
+                  <AvatarFallback>AI</AvatarFallback>
+                </Avatar>
+                <div className='max-w-xs rounded-lg bg-muted px-4 py-2 text-sm lg:max-w-md'>
+                  <div className='flex items-center space-x-2'>
+                    <span className='h-2 w-2 animate-pulse rounded-full bg-foreground [animation-delay:-0.3s]'></span>
+                    <span className='h-2 w-2 animate-pulse rounded-full bg-foreground [animation-delay:-0.15s]'></span>
+                    <span className='h-2 w-2 animate-pulse rounded-full bg-foreground'></span>
+                  </div>
+                </div>
+              </div>
+            )}
             <div ref={messagesEndRef} />
           </div>
         </ScrollArea>
         <form
           onSubmit={handleSendMessage}
-          className='mt-4 flex w-full items-center space-x-2 border-t pt-4'
+          className='mt-4 flex w-full flex-shrink-0 items-center space-x-2 border-t pt-4'
         >
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder='Type a message...'
             autoComplete='off'
+            disabled={isLoading}
           />
-          <Button type='submit'>Send</Button>
+          <Button type='submit' disabled={isLoading}>
+            Send
+          </Button>
         </form>
       </CardContent>
     </Card>
   )
 }
-
 // ===== Data and Components for Delivery Fee Calculator =====
 
 const destinations = [
