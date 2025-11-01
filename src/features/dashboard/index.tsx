@@ -920,9 +920,9 @@ function TipPopup() {
   }
 
   return (
-    <div className='fixed bottom-4 right-4 z-50 w-full max-w-sm rounded-lg border bg-card p-4 text-card-foreground shadow-lg animate-in fade-in-90 slide-in-from-bottom-10'>
+    <div className='fixed bottom-4 right-4 z-50 w-full max-w-xs rounded-lg border bg-card p-4 text-card-foreground shadow-lg animate-in fade-in-90 slide-in-from-bottom-10'>
       <div className='flex items-start justify-between'>
-        <div className='flex items-center gap-3'>
+        <div className='flex items-center gap-2'>
           <svg
             xmlns='http://www.w3.org/2000/svg'
             width='24'
