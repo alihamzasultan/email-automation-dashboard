@@ -591,7 +591,7 @@ function processStatsForDisplay(
 
   const sortedItems = Object.entries(counts).sort(([, a], [, b]) => b - a)
 
-  const topThree = sortedItems
+  const topItems = sortedItems
     .slice(0, 3)
     .map(([name, count]) => ({
       name,
@@ -604,7 +604,7 @@ function processStatsForDisplay(
       .slice(3)
       .reduce((acc, [, count]) => acc + count, 0)
     if (otherCount > 0) {
-      topThree.push({
+      topItems.push({
         name: 'Other',
         count: otherCount,
         percentage: (otherCount / total) * 100,
@@ -612,7 +612,7 @@ function processStatsForDisplay(
     }
   }
 
-  return topThree
+  return topItems
 }
 
 /**
@@ -623,7 +623,7 @@ function getEmotionStyle(emotion: string) {
   switch (emotion.toLowerCase()) {
     case 'happy':
       return {
-        color: 'bg-green-400',
+        color: 'text-green-400',
         icon: (
           <svg
             xmlns='http://www.w3.org/2000/svg'
@@ -642,7 +642,7 @@ function getEmotionStyle(emotion: string) {
       }
     case 'sad':
       return {
-        color: 'bg-blue-400',
+        color: 'text-blue-400',
         icon: (
           <svg
             xmlns='http://www.w3.org/2000/svg'
@@ -661,7 +661,7 @@ function getEmotionStyle(emotion: string) {
       }
     case 'angry':
       return {
-        color: 'bg-red-500',
+        color: 'text-red-500',
         icon: (
           <svg
             xmlns='http://www.w3.org/2000/svg'
@@ -680,7 +680,7 @@ function getEmotionStyle(emotion: string) {
       }
     case 'thankful':
       return {
-        color: 'bg-pink-400',
+        color: 'text-pink-400',
         icon: (
           <svg
             xmlns='http://www.w3.org/2000/svg'
@@ -696,7 +696,7 @@ function getEmotionStyle(emotion: string) {
       }
     case 'excited':
       return {
-        color: 'bg-yellow-400',
+        color: 'text-yellow-400',
         icon: (
           <svg
             xmlns='http://www.w3.org/2000/svg'
@@ -715,7 +715,7 @@ function getEmotionStyle(emotion: string) {
       }
     case 'other':
       return {
-        color: 'bg-slate-400',
+        color: 'text-slate-400',
         icon: (
           <svg
             xmlns='http://www.w3.org/2000/svg'
@@ -733,7 +733,7 @@ function getEmotionStyle(emotion: string) {
       }
     default:
       return {
-        color: 'bg-gray-400',
+        color: 'text-gray-400',
         icon: (
           <svg
             xmlns='http://www.w3.org/2000/svg'
@@ -756,7 +756,7 @@ function getClassificationStyle(classification: string) {
   switch (classification.toLowerCase()) {
     case 'inquiry':
       return {
-        color: 'bg-cyan-400',
+        color: 'text-cyan-400',
         icon: (
           <svg
             xmlns='http://www.w3.org/2000/svg'
@@ -774,7 +774,7 @@ function getClassificationStyle(classification: string) {
       }
     case 'feedback':
       return {
-        color: 'bg-purple-400',
+        color: 'text-purple-400',
         icon: (
           <svg
             xmlns='http://www.w3.org/2000/svg'
@@ -790,7 +790,7 @@ function getClassificationStyle(classification: string) {
       }
     case 'spam':
       return {
-        color: 'bg-orange-500',
+        color: 'text-orange-500',
         icon: (
           <svg
             xmlns='http://www.w3.org/2000/svg'
@@ -808,7 +808,7 @@ function getClassificationStyle(classification: string) {
       }
     default: // Other
       return {
-        color: 'bg-slate-400',
+        color: 'text-slate-400',
         icon: (
           <svg
             xmlns='http://www.w3.org/2000/svg'
@@ -823,6 +823,71 @@ function getClassificationStyle(classification: string) {
         ),
       }
   }
+}
+
+// ===== NEW Component for Circular Progress =====
+function CircularProgress({
+  percentage,
+  color,
+  icon,
+  name,
+}: {
+  percentage: number
+  color: string
+  icon: React.ReactNode
+  name: string
+}) {
+  const sqSize = 80
+  const strokeWidth = 8
+  const radius = (sqSize - strokeWidth) / 2
+  const viewBox = `0 0 ${sqSize} ${sqSize}`
+  const dashArray = radius * Math.PI * 2
+  const dashOffset = dashArray - (dashArray * percentage) / 100
+
+  return (
+    <div className='flex flex-col items-center justify-center gap-1 text-center'>
+      <div className='relative flex h-[80px] w-[80px] items-center justify-center'>
+        <svg
+          width={sqSize}
+          height={sqSize}
+          viewBox={viewBox}
+          className='-rotate-90'
+        >
+          <circle
+            className='text-muted'
+            cx={sqSize / 2}
+            cy={sqSize / 2}
+            r={radius}
+            strokeWidth={`${strokeWidth}px`}
+            fill='none'
+            stroke='currentColor'
+          />
+          <circle
+            className={color}
+            cx={sqSize / 2}
+            cy={sqSize / 2}
+            r={radius}
+            strokeWidth={`${strokeWidth}px`}
+            fill='none'
+            stroke='currentColor'
+            strokeLinecap='round'
+            style={{
+              strokeDasharray: dashArray,
+              strokeDashoffset: dashOffset,
+              transition: 'stroke-dashoffset 0.5s ease-in-out',
+            }}
+          />
+        </svg>
+        <div className='absolute flex flex-col items-center justify-center'>
+          <div className='h-6 w-6'>{icon}</div>
+          <span className='text-base font-bold'>{`${percentage.toFixed(0)}%`}</span>
+        </div>
+      </div>
+      <p className='max-w-[80px] truncate text-xs font-medium capitalize text-muted-foreground'>
+        {name}
+      </p>
+    </div>
+  )
 }
 
 // ===== Main Dashboard Component =====
@@ -841,9 +906,9 @@ export default function Dashboard() {
   React.useEffect(() => {
     const fetchEmailStats = async () => {
       setIsLoadingStats(true)
-      const { data, error, count } = await supabase
+      const { data, error } = await supabase
         .from('emails')
-        .select('emotion, classification', { count: 'exact' })
+        .select('emotion, classification')
 
       if (error) {
         console.error('Error fetching email data:', error)
@@ -852,7 +917,7 @@ export default function Dashboard() {
         return
       }
 
-      if (data && count) {
+      if (data) {
         const emotionCounts: Record<string, number> = {}
         const classificationCounts: Record<string, number> = {}
         let validEmotionsTotal = 0
@@ -861,17 +926,20 @@ export default function Dashboard() {
         for (const email of data) {
           if (email.emotion) {
             emotionCounts[email.emotion] = (emotionCounts[email.emotion] || 0) + 1
-            validEmotionsTotal++;
+            validEmotionsTotal++
           }
           if (email.classification) {
             classificationCounts[email.classification] =
               (classificationCounts[email.classification] || 0) + 1
-            validClassificationsTotal++;
+            validClassificationsTotal++
           }
         }
 
         setEmailStats({
-          processedEmotions: processStatsForDisplay(emotionCounts, validEmotionsTotal),
+          processedEmotions: processStatsForDisplay(
+            emotionCounts,
+            validEmotionsTotal
+          ),
           processedClassifications: processStatsForDisplay(
             classificationCounts,
             validClassificationsTotal
@@ -921,7 +989,7 @@ export default function Dashboard() {
                   <CardTitle className='text-sm font-medium'>
                     Total Revenue
                   </CardTitle>
-                   <svg
+                  <svg
                     xmlns='http://www.w3.org/2000/svg'
                     viewBox='0 0 24 24'
                     fill='none'
@@ -936,7 +1004,7 @@ export default function Dashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className='text-2xl font-bold'>$45,231.89</div>
-                   <p className='text-muted-foreground text-xs'>
+                  <p className='text-muted-foreground text-xs'>
                     +20.1% from last month
                   </p>
                 </CardContent>
@@ -963,95 +1031,85 @@ export default function Dashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className='text-2xl font-bold'>+2350</div>
-                   <p className='text-muted-foreground text-xs'>
+                  <p className='text-muted-foreground text-xs'>
                     +180.1% from last month
                   </p>
                 </CardContent>
               </Card>
 
-              {/* ===== Top Emotions Card ===== */}
+              {/* ===== Top Emotions Card (MODIFIED) ===== */}
               <Card>
-                <CardHeader className='pb-4'>
+                <CardHeader className='pb-3'>
                   <CardTitle className='text-base'>Top Emotions</CardTitle>
                 </CardHeader>
                 <CardContent>
                   {isLoadingStats ? (
-                    <p className='text-sm text-muted-foreground'>Loading...</p>
+                    <div className='flex h-[105px] items-center justify-center'>
+                      <p className='text-sm text-muted-foreground'>
+                        Loading...
+                      </p>
+                    </div>
                   ) : emailStats.processedEmotions.length > 0 ? (
-                    <div className='space-y-4'>
+                    <div className='flex w-full flex-wrap items-start justify-around gap-x-2 gap-y-4'>
                       {emailStats.processedEmotions.map((stat) => {
                         const style = getEmotionStyle(stat.name)
                         return (
-                          <div key={stat.name} className='space-y-1'>
-                            <div className='flex items-center justify-between text-sm'>
-                              <div className='flex items-center gap-2'>
-                                <span
-                                  className={`h-2 w-2 rounded-full ${style.color}`}
-                                />
-                                {style.icon}
-                                <span className='capitalize'>{stat.name}</span>
-                              </div>
-                              <span className='font-medium'>
-                                {stat.percentage.toFixed(0)}%
-                              </span>
-                            </div>
-                            <div className='h-2 w-full rounded-full bg-muted'>
-                              <div
-                                className={`h-2 rounded-full ${style.color}`}
-                                style={{
-                                  width: `${stat.percentage.toFixed(0)}%`,
-                                }}
-                              />
-                            </div>
-                          </div>
+                          <CircularProgress
+                            key={stat.name}
+                            name={stat.name}
+                            percentage={stat.percentage}
+                            color={style.color}
+                            icon={style.icon}
+                          />
                         )
                       })}
                     </div>
-                  ) : <p className='text-sm text-muted-foreground'>No data available.</p>}
+                  ) : (
+                    <div className='flex h-[105px] items-center justify-center'>
+                      <p className='text-sm text-muted-foreground'>
+                        No data available.
+                      </p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
-              {/* ===== Top Classifications Card ===== */}
+              {/* ===== Top Classifications Card (MODIFIED) ===== */}
               <Card>
-                <CardHeader className='pb-4'>
+                <CardHeader className='pb-3'>
                   <CardTitle className='text-base'>
                     Top Classifications
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   {isLoadingStats ? (
-                    <p className='text-sm text-muted-foreground'>Loading...</p>
+                    <div className='flex h-[105px] items-center justify-center'>
+                      <p className='text-sm text-muted-foreground'>
+                        Loading...
+                      </p>
+                    </div>
                   ) : emailStats.processedClassifications.length > 0 ? (
-                    <div className='space-y-4'>
+                    <div className='flex w-full flex-wrap items-start justify-around gap-x-2 gap-y-4'>
                       {emailStats.processedClassifications.map((stat) => {
                         const style = getClassificationStyle(stat.name)
                         return (
-                          <div key={stat.name} className='space-y-1'>
-                            <div className='flex items-center justify-between text-sm'>
-                              <div className='flex items-center gap-2'>
-                                <span
-                                  className={`h-2 w-2 rounded-full ${style.color}`}
-                                />
-                                {style.icon}
-                                <span className='capitalize'>{stat.name}</span>
-                              </div>
-                              <span className='font-medium'>
-                                {stat.percentage.toFixed(0)}%
-                              </span>
-                            </div>
-                            <div className='h-2 w-full rounded-full bg-muted'>
-                              <div
-                                className={`h-2 rounded-full ${style.color}`}
-                                style={{
-                                  width: `${stat.percentage.toFixed(0)}%`,
-                                }}
-                              />
-                            </div>
-                          </div>
+                          <CircularProgress
+                            key={stat.name}
+                            name={stat.name}
+                            percentage={stat.percentage}
+                            color={style.color}
+                            icon={style.icon}
+                          />
                         )
                       })}
                     </div>
-                  ) : <p className='text-sm text-muted-foreground'>No data available.</p>}
+                  ) : (
+                    <div className='flex h-[105px] items-center justify-center'>
+                      <p className='text-sm text-muted-foreground'>
+                        No data available.
+                      </p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
