@@ -829,7 +829,6 @@ function getClassificationStyle(classification: string) {
 function CircularProgress({
   percentage,
   color,
-  icon,
   name,
 }: {
   percentage: number
