@@ -42,31 +42,36 @@ import { RecentSales } from './components/recent-sales'
 function formatBotResponse(text: string): string {
   let formattedText = text
 
-  // 1. Convert Markdown images ![alt](url) to responsive <img> tags with Tailwind classes
+  // The order of operations is crucial to prevent incorrect replacements.
+  // We must handle more specific patterns (like Markdown images) before
+  // more generic ones (like standalone URLs).
+
+  // 1. Convert Markdown bold **text** to <strong>
+  formattedText = formattedText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+
+  // 2. Convert Markdown images ![alt](url) to responsive <img> tags
+  // This MUST run before the generic URL-to-link conversion.
   formattedText = formattedText.replace(
     /!\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g,
-    (altText, imageUrl) => {
-      return `<img src="${imageUrl}" alt="${altText}" class="my-2 max-w-full rounded-lg shadow-md h-auto" />`
+    (_match, altText, imageUrl) => {
+      // The _match argument is the full matched string, which we don't need here.
+      // altText is the first captured group (.*?), and imageUrl is the second.
+      return `<img src="${imageUrl.trim()}" alt="${altText.trim()}" class="my-2 max-w-full rounded-lg shadow-md h-auto" />`
     }
   )
 
-  // 2. Convert other URLs to clickable <a> tags (that are not part of an image tag)
-  // This regex avoids replacing URLs that are already inside href or src attributes
+  // 3. Convert other URLs to clickable <a> tags (that are not part of an image tag)
+  // This regex uses a negative lookbehind (?<!) to avoid replacing URLs
+  // that are already inside href or src attributes from the previous step.
   formattedText = formattedText.replace(
     /(?<!href="|src=")(https?:\/\/[^\s<>"]+)/g,
     (url) => {
-      // Avoid turning image URLs into links again
-      if (/\.(jpg|jpeg|png|gif)$/i.test(url)) {
-        return url
-      }
       return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-primary underline hover:text-primary/80">${url}</a>`
     }
   )
 
-  // 3. Convert Markdown bold **text** to <strong>
-  formattedText = formattedText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-
   // 4. Convert line breaks \n to <br> tags for proper spacing in HTML
+  // This is best done last to avoid interfering with regex patterns.
   formattedText = formattedText.replace(/\n/g, '<br />')
 
   return formattedText
@@ -178,7 +183,7 @@ function Chatbot() {
       </CardHeader>
       <CardContent className='flex h-[60vh] flex-col'>
         {/* The 'flex-grow' element needs 'min-h-0' to prevent it from overflowing its parent */}
-        <ScrollArea className='flex-grow min-h-0 pr-4'> 
+        <ScrollArea className='flex-grow min-h-0 pr-4'>
           <div className='space-y-4'>
             {messages.map((message) => (
               <div
