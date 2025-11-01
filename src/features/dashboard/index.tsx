@@ -1,6 +1,8 @@
 'use client'
 
 import * as React from 'react'
+// 1. Import the Supabase client creator
+import { createClient } from '@supabase/supabase-js'
 
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -31,6 +33,12 @@ import { ThemeSwitch } from '@/components/theme-switch'
 import { Overview } from './components/overview'
 import { RecentSales } from './components/recent-sales'
 
+// ===== Supabase Client Setup =====
+const supabaseUrl = 'https://wxynstpanhlkgdjexhrp.supabase.co'
+const supabaseKey =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4eW5zdHBhbmhsa2dkamV4aHJwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMzMjAwNjUsImV4cCI6MjA2ODg5NjA2NX0.p_YbeN2FUXusUFmcL4eOQbTivUtdEupvSnaa8WoFOZc'
+const supabase = createClient(supabaseUrl, supabaseKey)
+
 // ===== Chatbot Formatting Helpers =====
 
 /**
@@ -42,27 +50,18 @@ import { RecentSales } from './components/recent-sales'
 function formatBotResponse(text: string): string {
   let formattedText = text
 
-  // The order of operations is crucial to prevent incorrect replacements.
-  // We must handle more specific patterns (like Markdown images) before
-  // more generic ones (like standalone URLs).
-
   // 1. Convert Markdown bold **text** to <strong>
   formattedText = formattedText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
 
   // 2. Convert Markdown images ![alt](url) to responsive <img> tags
-  // This MUST run before the generic URL-to-link conversion.
   formattedText = formattedText.replace(
     /!\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g,
     (_match, altText, imageUrl) => {
-      // The _match argument is the full matched string, which we don't need here.
-      // altText is the first captured group (.*?), and imageUrl is the second.
       return `<img src="${imageUrl.trim()}" alt="${altText.trim()}" class="my-2 max-w-full rounded-lg shadow-md h-auto" />`
     }
   )
 
   // 3. Convert other URLs to clickable <a> tags (that are not part of an image tag)
-  // This regex uses a negative lookbehind (?<!) to avoid replacing URLs
-  // that are already inside href or src attributes from the previous step.
   formattedText = formattedText.replace(
     /(?<!href="|src=")(https?:\/\/[^\s<>"]+)/g,
     (url) => {
@@ -71,7 +70,6 @@ function formatBotResponse(text: string): string {
   )
 
   // 4. Convert line breaks \n to <br> tags for proper spacing in HTML
-  // This is best done last to avoid interfering with regex patterns.
   formattedText = formattedText.replace(/\n/g, '<br />')
 
   return formattedText
@@ -182,7 +180,6 @@ function Chatbot() {
         </CardDescription>
       </CardHeader>
       <CardContent className='flex h-[60vh] flex-col'>
-        {/* The 'flex-grow' element needs 'min-h-0' to prevent it from overflowing its parent */}
         <ScrollArea className='flex-grow min-h-0 pr-4'>
           <div className='space-y-4'>
             {messages.map((message) => (
@@ -598,10 +595,82 @@ function DeliveryFeeCalculator() {
   )
 }
 
+// ===== Main Dashboard Component =====
+
 export default function Dashboard() {
+  // State to hold the calculated email statistics
+  const [emailStats, setEmailStats] = React.useState({
+    topEmotion: 'Loading...',
+    topClassification: 'Loading...',
+    totalEmails: 0,
+  })
+  const [error, setError] = React.useState<string | null>(null)
+
+  // useEffect hook to fetch and process data from Supabase on component mount
+  React.useEffect(() => {
+    const fetchEmailStats = async () => {
+      // Fetch only the columns we need from the 'emails' table
+      const { data, error } = await supabase
+        .from('emails')
+        .select('emotion, classification')
+
+      if (error) {
+        console.error('Error fetching email data:', error)
+        setError('Failed to load email statistics.')
+        setEmailStats({
+          topEmotion: 'Error',
+          topClassification: 'Error',
+          totalEmails: 0,
+        })
+        return
+      }
+
+      if (!data || data.length === 0) {
+        setEmailStats({
+          topEmotion: 'N/A',
+          topClassification: 'N/A',
+          totalEmails: 0,
+        })
+        return
+      }
+
+      // Process the data to find the most frequent values
+      const emotionCounts: { [key: string]: number } = {}
+      const classificationCounts: { [key: string]: number } = {}
+
+      for (const email of data) {
+        if (email.emotion) {
+          emotionCounts[email.emotion] = (emotionCounts[email.emotion] || 0) + 1
+        }
+        if (email.classification) {
+          classificationCounts[email.classification] =
+            (classificationCounts[email.classification] || 0) + 1
+        }
+      }
+
+      // Find the key with the highest value in each count object
+      const topEmotion = Object.keys(emotionCounts).reduce(
+        (a, b) => (emotionCounts[a] > emotionCounts[b] ? a : b),
+        'N/A'
+      )
+      const topClassification = Object.keys(classificationCounts).reduce(
+        (a, b) => (classificationCounts[a] > classificationCounts[b] ? a : b),
+        'N/A'
+      )
+
+      // Update the state with the calculated stats
+      setEmailStats({
+        topEmotion,
+        topClassification,
+        totalEmails: data.length,
+      })
+    }
+
+    fetchEmailStats()
+  }, []) // Empty dependency array ensures this runs only once
+
   return (
     <>
-      {/* ===== Top Heading ===== */}
       <Header>
         <TopNav links={topNav} />
         <div className='ml-auto flex items-center space-x-4'>
@@ -611,7 +680,6 @@ export default function Dashboard() {
         </div>
       </Header>
 
-      {/* ===== Main ===== */}
       <Main>
         <div className='mb-2 flex items-center justify-between space-y-2'>
           <h1 className='text-2xl font-bold tracking-tight'>Dashboard</h1>
@@ -629,18 +697,10 @@ export default function Dashboard() {
               <TabsTrigger value='overview'>Overview</TabsTrigger>
               <TabsTrigger value='calculator'>Fee Calculator</TabsTrigger>
               <TabsTrigger value='chatbot'>Sales Assistant</TabsTrigger>
-              {/* <TabsTrigger value='analytics' disabled>
-                Analytics
-              </TabsTrigger> */}
-              {/* <TabsTrigger value='reports' disabled>
-                Reports
-              </TabsTrigger>
-              <TabsTrigger value='notifications' disabled>
-                Notifications
-              </TabsTrigger> */}
             </TabsList>
           </div>
           <TabsContent value='overview' className='space-y-4'>
+            {/* The grid now includes the two new cards for email stats */}
             <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
               <Card>
                 <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
@@ -694,9 +754,13 @@ export default function Dashboard() {
                   </p>
                 </CardContent>
               </Card>
+
+              {/* ===== NEW CARD: Top Emotion ===== */}
               <Card>
                 <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                  <CardTitle className='text-sm font-medium'>Sales</CardTitle>
+                  <CardTitle className='text-sm font-medium'>
+                    Top Emotion
+                  </CardTitle>
                   <svg
                     xmlns='http://www.w3.org/2000/svg'
                     viewBox='0 0 24 24'
@@ -707,21 +771,27 @@ export default function Dashboard() {
                     strokeWidth='2'
                     className='text-muted-foreground h-4 w-4'
                   >
-                    <rect width='20' height='14' x='2' y='5' rx='2' />
-                    <path d='M2 10h20' />
+                    <circle cx='12' cy='12' r='10' />
+                    <path d='M8 14s1.5 2 4 2 4-2 4-2' />
+                    <line x1='9' y1='9' x2='9.01' y2='9' />
+                    <line x1='15' y1='9' x2='15.01' y2='9' />
                   </svg>
                 </CardHeader>
                 <CardContent>
-                  <div className='text-2xl font-bold'>+12,234</div>
+                  <div className='text-2xl font-bold capitalize'>
+                    {emailStats.topEmotion}
+                  </div>
                   <p className='text-muted-foreground text-xs'>
-                    +19% from last month
+                    Most frequent sentiment in emails.
                   </p>
                 </CardContent>
               </Card>
+
+              {/* ===== NEW CARD: Top Classification ===== */}
               <Card>
                 <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
                   <CardTitle className='text-sm font-medium'>
-                    Active Now
+                    Top Classification
                   </CardTitle>
                   <svg
                     xmlns='http://www.w3.org/2000/svg'
@@ -737,13 +807,18 @@ export default function Dashboard() {
                   </svg>
                 </CardHeader>
                 <CardContent>
-                  <div className='text-2xl font-bold'>+573</div>
+                  <div className='text-2xl font-bold capitalize'>
+                    {emailStats.topClassification}
+                  </div>
                   <p className='text-muted-foreground text-xs'>
-                    +201 since last hour
+                    Most frequent category for emails.
                   </p>
                 </CardContent>
               </Card>
             </div>
+            {error && (
+              <p className='text-sm text-destructive'>{error}</p>
+            )}
             <div className='grid grid-cols-1 gap-4 lg:grid-cols-7'>
               <Card className='col-span-1 lg:col-span-4'>
                 <CardHeader>
