@@ -1,11 +1,18 @@
-// app/dashboard/page.tsx (or your main dashboard file)
+// app/dashboard/components/delivery-fee-calculator.tsx
 
 'use client'
 
 import * as React from 'react'
-import { createClient } from '@supabase/supabase-js'
+import 'leaflet/dist/leaflet.css'
+import 'leaflet-geosearch/dist/geosearch.css'
 
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet'
+import L from 'leaflet'
+import { GeoSearchControl, OpenStreetMapProvider } from 'leaflet-geosearch'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { Check, ChevronsUpDown, MapPin } from 'lucide-react'
+
+import { cn } from '@/lib/utils' // Make sure this path is correct for your project
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -15,898 +22,515 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Header } from '@/components/layout/header'
-import { Main } from '@/components/layout/main'
-import { TopNav } from '@/components/layout/top-nav'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { ThemeSwitch } from '@/components/theme-switch'
-import { Overview } from './components/overview'
-import { RecentSales } from './components/recent-sales'
-// ===== NEW: Import the refactored calculator component =====
-import DeliveryFeeCalculator from './components/delivery-fee-calculator'
+import { Label } from '@/components/ui/label'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { Separator } from '@/components/ui/separator' // Added for visual separation
 
-// ===== Supabase Client Setup =====
-const supabaseUrl = 'https://wxynstpanhlkgdjexhrp.supabase.co'
-const supabaseKey =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4eW5zdHBhbmhsa2dkamV4aHJwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMzMjAwNjUsImV4cCI6MjA2ODg5NjA2NX0.p_YbeN2FUXusUFmcL4eOQbTivUtdEupvSnaa8WoFOZc'
-const supabase = createClient(supabaseUrl, supabaseKey)
-
-// ===== Chatbot Formatting Helpers =====
-
-function formatBotResponse(text: string): string {
-  let formattedText = text
-  formattedText = formattedText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-  formattedText = formattedText.replace(
-    /!\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g,
-    (_match, altText, imageUrl) => {
-      return `<img src="${imageUrl.trim()}" alt="${altText.trim()}" class="my-2 max-w-full rounded-lg shadow-md h-auto" />`
-    }
-  )
-  formattedText = formattedText.replace(
-    /(?<!href="|src=")(https?:\/\/[^\s<>"]+)/g,
-    (url) => {
-      return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-primary underline hover:text-primary/80">${url}</a>`
-    }
-  )
-  formattedText = formattedText.replace(/\n/g, '<br />')
-  return formattedText
+// ===== TYPE DEFINITIONS =====
+type Destination = {
+  name: string
+  miles: number
+  lat: number
+  lng: number
 }
 
-function BotMessage({ text }: { text: string }) {
-  const formattedHtml = formatBotResponse(text)
-  return (
-    <div
-      className='prose prose-sm dark:prose-invert max-w-none'
-      dangerouslySetInnerHTML={{ __html: formattedHtml }}
-    />
-  )
+type FeeDetails = {
+  laborCost: number
+  gasCost: number
+  subtotal: number
+  suggestedFee: number
+  roundTripMiles: number
+  estHours: number
+  tollsAndExtras: number
 }
 
-// ===== Data and Components for Chatbot =====
+// ===== DATA AND CONSTANTS =====
 
-type Message = {
-  id: number
-  text: string
-  sender: 'user' | 'bot'
+// UPDATED: Home base is now set to your Deerfield Beach address.
+const HOME_BASE = { lat: 26.2975, lng: -80.1475, name: 'Our Location (Deerfield Beach)' }
+
+// UPDATED: Distances are recalculated from the new Deerfield Beach home base.
+const destinations: Destination[] = [
+  { name: 'Boca Raton', miles: 4, lat: 26.3587, lng: -80.0831 },
+  { name: 'Delray Beach', miles: 11, lat: 26.4615, lng: -80.0728 },
+  { name: 'Fort Lauderdale', miles: 12, lat: 26.1224, lng: -80.1373 },
+  { name: 'Boynton Beach', miles: 16, lat: 26.5251, lng: -80.0628 },
+  { name: 'Lake Worth', miles: 22, lat: 26.6159, lng: -80.0573 },
+  { name: 'West Palm Beach', miles: 29, lat: 26.7153, lng: -80.0534 },
+  { name: 'Palm Beach Gardens', miles: 37, lat: 26.8242, lng: -80.1386 },
+  { name: 'Miami', miles: 37, lat: 25.7617, lng: -80.1918 },
+  { name: 'Jupiter', miles: 44, lat: 26.9342, lng: -80.0942 },
+  { name: 'Port St. Lucie', miles: 69, lat: 27.2931, lng: -80.3503 },
+  { name: 'Homestead', miles: 59, lat: 25.4687, lng: -80.4776 },
+  { name: 'Orlando', miles: 182, lat: 28.5383, lng: -81.3792 },
+  { name: 'Key West', miles: 185, lat: 24.5551, lng: -81.78 },
+  { name: 'Tampa', miles: 195, lat: 27.9506, lng: -82.4572 },
+  { name: 'Jacksonville', miles: 309, lat: 30.3322, lng: -81.6557 },
+]
+
+// Default (blue) icon for non-selected points like Home Base
+const defaultIcon = L.icon({
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+})
+
+// Custom (red) icon for the selected destination
+const customIcon = L.icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+})
+
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 3958.8 // Radius of the Earth in miles
+  const dLat = (lat2 - lat1) * (Math.PI / 180)
+  const dLon = (lon2 - lon1) * (Math.PI / 180)
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) *
+      Math.cos(lat2 * (Math.PI / 180)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return R * c
 }
 
-function Chatbot() {
-  const [messages, setMessages] = React.useState<Message[]>([])
-  const [input, setInput] = React.useState('')
-  const [isLoading, setIsLoading] = React.useState(false)
-  const messagesEndRef = React.useRef<HTMLDivElement>(null)
+// ===== HELPER COMPONENTS =====
+
+function ChangeView({ center, zoom }: { center: [number, number]; zoom: number }) {
+  const map = useMap()
+  React.useEffect(() => {
+    map.flyTo(center, zoom, { animate: true, duration: 1.5 })
+  }, [center, zoom, map])
+  return null
+}
+
+function MapClickHandler({ onMapClick, isActive }: { onMapClick: (latlng: L.LatLng) => void; isActive: boolean }) {
+  useMapEvents({
+    click(e) {
+      if (isActive) {
+        onMapClick(e.latlng)
+      }
+    },
+  })
+  return null
+}
+
+function MapSearch({ onLocationFound }: { onLocationFound: (location: any) => void }) {
+  const map = useMap()
 
   React.useEffect(() => {
-    setMessages([
-      {
-        id: 1,
-        text: "Hello! I'm your sales assistant. How can I help you today?",
-        sender: 'bot',
+    const provider = new OpenStreetMapProvider()
+
+    const searchControl = GeoSearchControl({
+      provider,
+      style: 'bar',
+      showMarker: false, // We handle the marker rendering ourselves
+      showPopup: false,
+      autoClose: true,
+      retainZoomLevel: false,
+    })
+
+    map.addControl(searchControl)
+
+    const handleShowLocation = (result: any) => {
+      const location = result?.location
+      if (location) {
+        onLocationFound({
+          x: location.x, // longitude
+          y: location.y, // latitude
+          label: location.label,
+        })
+      }
+    }
+
+    map.on('geosearch/showlocation', handleShowLocation)
+
+    return () => {
+      map.removeControl(searchControl)
+      map.off('geosearch/showlocation', handleShowLocation)
+    }
+  }, [map, onLocationFound])
+
+  return null
+}
+
+function PinDropControl({ isPinDropMode, onToggle }: { isPinDropMode: boolean; onToggle: () => void }) {
+  const map = useMap()
+
+  React.useEffect(() => {
+    const controlContainer = L.DomUtil.create('div', 'leaflet-bar leaflet-control')
+    const button = L.DomUtil.create('a', 'leaflet-control-button', controlContainer)
+    button.innerHTML = renderToStaticMarkup(<MapPin size={18} />)
+    button.href = '#'
+    button.role = 'button'
+    button.title = 'Drop a pin to select a custom location'
+
+    const updateStyle = () => {
+      if (isPinDropMode) L.DomUtil.addClass(button, 'active')
+      else L.DomUtil.removeClass(button, 'active')
+    }
+    updateStyle()
+
+    L.DomEvent.on(button, 'click', L.DomEvent.stop).on(button, 'click', onToggle)
+
+    const CustomControl = L.Control.extend({
+      onAdd: () => controlContainer,
+      onRemove: () => {
+        L.DomEvent.off(button, 'click', onToggle)
       },
-    ])
-  }, [])
+    })
 
-  React.useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    const customControlInstance = new (CustomControl as any)({ position: 'topleft' })
+    map.addControl(customControlInstance)
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (input.trim() === '' || isLoading) return
-
-    setIsLoading(true)
-    const userMessageText = input
-    const newUserMessage: Message = {
-      id: Date.now(),
-      text: userMessageText,
-      sender: 'user',
+    return () => {
+      map.removeControl(customControlInstance)
     }
-    setMessages((prev) => [...prev, newUserMessage])
-    setInput('')
+  }, [map, isPinDropMode, onToggle])
 
+  return null
+}
+
+function LocationMap({
+  destinations,
+  selected,
+  customLocation,
+  isPinDropMode,
+  onMapClick,
+  onLocationFound,
+  onTogglePinDrop,
+}: {
+  destinations: Destination[]
+  selected: string
+  customLocation: Destination | null
+  isPinDropMode: boolean
+  onMapClick: (latlng: L.LatLng) => void
+  onLocationFound: (location: any) => void
+  onTogglePinDrop: () => void
+}) {
+  // Find the single destination to display, if any is selected
+  const selectedDestination =
+    (customLocation && customLocation.name === selected
+      ? customLocation
+      : destinations.find((d) => d.name === selected)) || null
+
+  // Center map on selected destination, or home base if none is selected
+  const mapCenter: [number, number] = selectedDestination
+    ? [selectedDestination.lat, selectedDestination.lng]
+    : [HOME_BASE.lat, HOME_BASE.lng]
+
+  const mapZoom = selectedDestination ? 12 : 10
+
+  return (
+    <Card className='overflow-hidden'>
+      <MapContainer
+        center={mapCenter}
+        zoom={mapZoom}
+        scrollWheelZoom={false}
+        className='h-full w-full min-h-[400px] md:min-h-[600px] z-0'
+      >
+        <ChangeView center={mapCenter} zoom={mapZoom} />
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+        />
+
+        {/* Always show Home Base marker */}
+        <Marker key={HOME_BASE.name} position={[HOME_BASE.lat, HOME_BASE.lng]} icon={defaultIcon}>
+          <Popup>{HOME_BASE.name}</Popup>
+        </Marker>
+
+        {/* Show a single red marker ONLY for the selected destination */}
+        {selectedDestination && (
+          <Marker
+            key={selectedDestination.name}
+            position={[selectedDestination.lat, selectedDestination.lng]}
+            icon={customIcon}
+          >
+            <Popup>{selectedDestination.name}</Popup>
+          </Marker>
+        )}
+
+        <MapSearch onLocationFound={onLocationFound} />
+        <MapClickHandler onMapClick={onMapClick} isActive={isPinDropMode} />
+        <PinDropControl isPinDropMode={isPinDropMode} onToggle={onTogglePinDrop} />
+      </MapContainer>
+    </Card>
+  )
+}
+
+// ===== BACKEND SIMULATION =====
+const calculateFeeOnBackend = async (miles: number, tolls: number, extras: number): Promise<FeeDetails> => {
+  console.log(`Simulating backend call for ${miles} miles with tolls: ${tolls}, extras: ${extras}`)
+  const driverRate = 22.5,
+    gasPrice = 3.5,
+    mpg = 15.0,
+    avgSpeed = 50.0,
+    margin = 0.15
+  await new Promise((resolve) => setTimeout(resolve, 500))
+  const oneWayMiles = miles,
+    roundTripMiles = oneWayMiles * 2,
+    estHours = roundTripMiles > 0 ? roundTripMiles / avgSpeed : 0,
+    laborCost = estHours * driverRate,
+    gallons = roundTripMiles > 0 ? roundTripMiles / mpg : 0,
+    gasCost = gallons * gasPrice,
+    tollsAndExtras = tolls + extras,
+    subtotal = laborCost + gasCost + tollsAndExtras,
+    suggestedFee = subtotal * (1 + margin)
+  return { roundTripMiles, estHours, laborCost, gasCost, tollsAndExtras, subtotal, suggestedFee }
+}
+
+// ===== MAIN COMPONENT =====
+export default function DeliveryFeeCalculator() {
+  const [destination, setDestination] = React.useState('') // Start with no destination selected
+  const [tolls, setTolls] = React.useState(0.0)
+  const [extras, setExtras] = React.useState(0.0)
+  const [feeDetails, setFeeDetails] = React.useState<FeeDetails | null>(null)
+  const [isLoading, setIsLoading] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+  const [customLocation, setCustomLocation] = React.useState<Destination | null>(null)
+  const [isPinDropMode, setIsPinDropMode] = React.useState(false)
+  const [isComboboxOpen, setIsComboboxOpen] = React.useState(false)
+
+  const handleCalculate = async (e: React.FormEvent) => {
+    e.preventDefault()
     try {
-      const formData = new FormData()
-      formData.append('user_input', userMessageText)
-
-      const response = await fetch(
-        'https://web-production-330a5.up.railway.app/chatbot',
-        {
-          method: 'POST',
-          body: formData,
-        }
-      )
-
-      if (!response.ok) {
-        throw new Error(`Error: ${response.statusText}`)
-      }
-
-      const data = await response.json()
-
-      const botReply: Message = {
-        id: Date.now() + 1,
-        text: data.response || "Sorry, I didn't get a valid response.",
-        sender: 'bot',
-      }
-      setMessages((prev) => [...prev, botReply])
-    } catch (error) {
-      console.error('Failed to fetch chatbot reply:', error)
-      const errorReply: Message = {
-        id: Date.now() + 1,
-        text: "I'm sorry, but I'm having trouble connecting to my brain right now. Please try again in a moment.",
-        sender: 'bot',
-      }
-      setMessages((prev) => [...prev, errorReply])
+      setIsLoading(true)
+      setError(null)
+      const selectedDest = destinations.find((d) => d.name === destination) || customLocation
+      if (!selectedDest) throw new Error('Invalid destination selected.')
+      const result = await calculateFeeOnBackend(selectedDest.miles, tolls, extras)
+      setFeeDetails(result)
+    } catch (err: any) {
+      setError(err.message)
     } finally {
       setIsLoading(false)
     }
   }
 
-  return (
-    <Card className='mx-auto w-full max-w-5x1'>
-      <CardHeader>
-        <CardTitle>Sales Assistant</CardTitle>
-        <CardDescription>
-          Chat with your AI assistant for sales insights and support.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className='flex h-[60vh] flex-col'>
-        <ScrollArea className='flex-grow min-h-0 pr-4'>
-          <div className='space-y-4'>
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex items-end gap-2 ${
-                  message.sender === 'user' ? 'justify-end' : 'justify-start'
-                }`}
-              >
-                {message.sender === 'bot' && (
-                  <Avatar className='h-8 w-8 self-start'>
-                    <AvatarFallback>AI</AvatarFallback>
-                  </Avatar>
-                )}
-                <div
-                  className={`min-w-0 max-w-xs break-words rounded-lg px-4 py-2 text-sm lg:max-w-md ${
-                    message.sender === 'user'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted'
-                  }`}
-                >
-                  {message.sender === 'user' ? (
-                    message.text
-                  ) : (
-                    <BotMessage text={message.text} />
-                  )}
-                </div>
-                {message.sender === 'user' && (
-                  <Avatar className='h-8 w-8'>
-                    <AvatarFallback>You</AvatarFallback>
-                  </Avatar>
-                )}
-              </div>
-            ))}
-            {isLoading && (
-              <div className='flex items-end gap-2 justify-start'>
-                <Avatar className='h-8 w-8 self-start'>
-                  <AvatarFallback>AI</AvatarFallback>
-                </Avatar>
-                <div className='max-w-xs rounded-lg bg-muted px-4 py-2 text-sm lg:max-w-md'>
-                  <div className='flex items-center space-x-2'>
-                    <span className='h-2 w-2 animate-pulse rounded-full bg-foreground [animation-delay:-0.3s]'></span>
-                    <span className='h-2 w-2 animate-pulse rounded-full bg-foreground [animation-delay:-0.15s]'></span>
-                    <span className='h-2 w-2 animate-pulse rounded-full bg-foreground'></span>
-                  </div>
-                </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-        </ScrollArea>
-        <form
-          onSubmit={handleSendMessage}
-          className='mt-4 flex w-full flex-shrink-0 items-center space-x-2 border-t pt-4'
-        >
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder='Type a message...'
-            autoComplete='off'
-            disabled={isLoading}
-          />
-          <Button type='submit' disabled={isLoading}>
-            Send
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
-  )
-}
-
-// ===== REMOVED: All Delivery Fee Calculator code has been moved to its own file. =====
-
-// ===== HELPERS for Dashboard Stats =====
-
-type StatItem = {
-  name: string
-  count: number
-  percentage: number
-}
-
-/**
- * Processes raw counts into a top-3 + "Other" format with percentages.
- */
-function processStatsForDisplay(
-  counts: Record<string, number>,
-  total: number
-): StatItem[] {
-  if (total === 0 || Object.keys(counts).length === 0) return []
-
-  const sortedItems = Object.entries(counts).sort(([, a], [, b]) => b - a)
-
-  const topItems = sortedItems
-    .slice(0, 3)
-    .map(([name, count]) => ({
-      name,
-      count,
-      percentage: (count / total) * 100,
-    }))
-
-  if (sortedItems.length > 3) {
-    const otherCount = sortedItems
-      .slice(3)
-      .reduce((acc, [, count]) => acc + count, 0)
-    if (otherCount > 0) {
-      topItems.push({
-        name: 'Other',
-        count: otherCount,
-        percentage: (otherCount / total) * 100,
-      })
-    }
+  // Handler for selecting a PREDEFINED destination from the list
+  const handleDestinationSelect = (selectedName: string) => {
+    setDestination(selectedName)
+    setCustomLocation(null) // Clear any custom location when selecting a predefined one
+    setFeeDetails(null)
+    setIsPinDropMode(false)
+    setIsComboboxOpen(false)
   }
 
-  return topItems
-}
-
-/**
- * Returns an icon and color for each emotion.
- */
-function getEmotionStyle(emotion: string) {
-  const commonIconClass = 'h-4 w-4 text-muted-foreground'
-  switch (emotion.toLowerCase()) {
-    case 'happy':
-      return {
-        color: 'text-green-400',
-        icon: (
-          <svg
-            xmlns='http://www.w3.org/2000/svg'
-            viewBox='0 0 24 24'
-            fill='none'
-            stroke='currentColor'
-            strokeWidth='2'
-            className={commonIconClass}
-          >
-            <circle cx='12' cy='12' r='10' />
-            <path d='M8 14s1.5 2 4 2 4-2 4-2' />
-            <line x1='9' y1='9' x2='9.01' y2='9' />
-            <line x1='15' y1='9' x2='15.01' y2='9' />
-          </svg>
-        ),
-      }
-    case 'sad':
-      return {
-        color: 'text-blue-400',
-        icon: (
-          <svg
-            xmlns='http://www.w3.org/2000/svg'
-            viewBox='0 0 24 24'
-            fill='none'
-            stroke='currentColor'
-            strokeWidth='2'
-            className={commonIconClass}
-          >
-            <circle cx='12' cy='12' r='10' />
-            <path d='M8 16s1.5-2 4-2 4 2 4 2' />
-            <line x1='9' y1='10' x2='9.01' y2='10' />
-            <line x1='15' y1='10' x2='15.01' y2='10' />
-          </svg>
-        ),
-      }
-    case 'angry':
-      return {
-        color: 'text-red-500',
-        icon: (
-          <svg
-            xmlns='http://www.w3.org/2000/svg'
-            viewBox='0 0 24 24'
-            fill='none'
-            stroke='currentColor'
-            strokeWidth='2'
-            className={commonIconClass}
-          >
-            <circle cx='12' cy='12' r='10' />
-            <path d='M16 16s-1.5-2-4-2-4 2-4 2' />
-            <path d='m9 10 2 2' />
-            <path d='m15 10-2 2' />
-          </svg>
-        ),
-      }
-    case 'thankful':
-      return {
-        color: 'text-pink-400',
-        icon: (
-          <svg
-            xmlns='http://www.w3.org/2000/svg'
-            viewBox='0 0 24 24'
-            fill='none'
-            stroke='currentColor'
-            strokeWidth='2'
-            className={commonIconClass}
-          >
-            <path d='M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z' />
-          </svg>
-        ),
-      }
-    case 'excited':
-      return {
-        color: 'text-yellow-400',
-        icon: (
-          <svg
-            xmlns='http://www.w3.org/2000/svg'
-            viewBox='0 0 24 24'
-            fill='none'
-            stroke='currentColor'
-            strokeWidth='2'
-            className={commonIconClass}
-          >
-            <path d='M4.5 12.5a.5.5 0 0 1 .5-.5h14a.5.5 0 0 1 0 1H5a.5.5 0 0 1-.5-.5z' />
-            <path d='M8 8a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 8zm8 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2a.5.5 0 0 1 .5-.5z' />
-            <path d='m12 15-3.5-3.5' />
-            <path d='m12 15 3.5-3.5' />
-          </svg>
-        ),
-      }
-    case 'other':
-      return {
-        color: 'text-slate-400',
-        icon: (
-          <svg
-            xmlns='http://www.w3.org/2000/svg'
-            viewBox='0 0 24 24'
-            fill='none'
-            stroke='currentColor'
-            strokeWidth='2'
-            className={commonIconClass}
-          >
-            <circle cx='12' cy='12' r='1' />
-            <circle cx='19' cy='12' r='1' />
-            <circle cx='5' cy='12' r='1' />
-          </svg>
-        ),
-      }
-    default:
-      return {
-        color: 'text-gray-400',
-        icon: (
-          <svg
-            xmlns='http://www.w3.org/2000/svg'
-            viewBox='0 0 24 24'
-            fill='none'
-            stroke='currentColor'
-            strokeWidth='2'
-            className={commonIconClass}
-          >
-            <circle cx='12' cy='12' r='10' />
-            <line x1='8' y1='12' x2='16' y2='12' />
-          </svg>
-        ),
-      } // Neutral
+  // Resets the form and map to the initial state
+  const handleClear = () => {
+    setDestination('')
+    setCustomLocation(null)
+    setFeeDetails(null)
+    setTolls(0.0)
+    setExtras(0.0)
+    setIsPinDropMode(false)
+    setError(null)
   }
-}
 
-function getClassificationStyle(classification: string) {
-  const commonIconClass = 'h-4 w-4 text-muted-foreground'
-  switch (classification.toLowerCase()) {
-    case 'inquiry':
-      return {
-        color: 'text-cyan-400',
-        icon: (
-          <svg
-            xmlns='http://www.w3.org/2000/svg'
-            viewBox='0 0 24 24'
-            fill='none'
-            stroke='currentColor'
-            strokeWidth='2'
-            className={commonIconClass}
-          >
-            <circle cx='12' cy='12' r='10' />
-            <path d='M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3' />
-            <line x1='12' y1='17' x2='12.01' y2='17' />
-          </svg>
-        ),
-      }
-    case 'feedback':
-      return {
-        color: 'text-purple-400',
-        icon: (
-          <svg
-            xmlns='http://www.w3.org/2000/svg'
-            viewBox='0 0 24 24'
-            fill='none'
-            stroke='currentColor'
-            strokeWidth='2'
-            className={commonIconClass}
-          >
-            <path d='M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' />
-          </svg>
-        ),
-      }
-    case 'spam':
-      return {
-        color: 'text-orange-500',
-        icon: (
-          <svg
-            xmlns='http://www.w3.org/2000/svg'
-            viewBox='0 0 24 24'
-            fill='none'
-            stroke='currentColor'
-            strokeWidth='2'
-            className={commonIconClass}
-          >
-            <circle cx='12' cy='12' r='10' />
-            <line x1='12' y1='8' x2='12' y2='12' />
-            <line x1='12' y1='16' x2='12.01' y2='16' />
-          </svg>
-        ),
-      }
-    default: // Other
-      return {
-        color: 'text-slate-400',
-        icon: (
-          <svg
-            xmlns='http://www.w3.org/2000/svg'
-            viewBox='0 0 24 24'
-            fill='none'
-            stroke='currentColor'
-            strokeWidth='2'
-            className={commonIconClass}
-          >
-            <path d='M12.586 2.586a2 2 0 0 0-2.828 0L2.586 9.757a2 2 0 0 0 0 2.828l7.172 7.172a2 2 0 0 0 2.828 0l7.172-7.172a2 2 0 0 0 0-2.828L12.586 2.586z' />
-          </svg>
-        ),
-      }
+  const setCustomPoint = (lat: number, lng: number, label?: string) => {
+    const miles = calculateDistance(HOME_BASE.lat, HOME_BASE.lng, lat, lng)
+    const newName = label
+      ? `${label.split(',')[0]} (~${miles.toFixed(0)} mi)`
+      : `Custom Location (~${miles.toFixed(0)} mi)`
+    const newCustomLocation: Destination = { name: newName, miles, lat, lng }
+    setCustomLocation(newCustomLocation)
+    setDestination(newName) // Set the new custom location as the current destination
+    setFeeDetails(null)
   }
-}
 
-// ===== NEW Component for Circular Progress =====
-function CircularProgress({
-  percentage,
-  color,
-  name,
-}: {
-  percentage: number
-  color: string
-  icon: React.ReactNode
-  name: string
-}) {
-  const sqSize = 80
-  const strokeWidth = 8
-  const radius = (sqSize - strokeWidth) / 2
-  const viewBox = `0 0 ${sqSize} ${sqSize}`
-  const dashArray = radius * Math.PI * 2
-  const dashOffset = dashArray - (dashArray * percentage) / 100
+  const handleMapClick = (latlng: L.LatLng) => {
+    setCustomPoint(latlng.lat, latlng.lng)
+    setIsPinDropMode(false)
+  }
+
+  const handleSearchLocationFound = (location: any) => {
+    setCustomPoint(location.y, location.x, location.label)
+    setIsPinDropMode(false)
+  }
 
   return (
-    <div className='flex flex-col items-center justify-center gap-1 text-center'>
-      <div className='relative flex h-[80px] w-[80px] items-center justify-center'>
-        <svg
-          width={sqSize}
-          height={sqSize}
-          viewBox={viewBox}
-          className='-rotate-90'
-        >
-          <circle
-            className='text-muted'
-            cx={sqSize / 2}
-            cy={sqSize / 2}
-            r={radius}
-            strokeWidth={`${strokeWidth}px`}
-            fill='none'
-            stroke='currentColor'
-          />
-          <circle
-            className={color}
-            cx={sqSize / 2}
-            cy={sqSize / 2}
-            r={radius}
-            strokeWidth={`${strokeWidth}px`}
-            fill='none'
-            stroke='currentColor'
-            strokeLinecap='round'
-            style={{
-              strokeDasharray: dashArray,
-              strokeDashoffset: dashOffset,
-              transition: 'stroke-dashoffset 0.5s ease-in-out',
-            }}
-          />
-        </svg>
-        <div className='absolute flex flex-col items-center justify-center'>
-          <span className='text-base font-bold'>{`${percentage.toFixed(0)}%`}</span>
-        </div>
+    <div className={`grid gap-4 md:grid-cols-2 lg:grid-cols-3 ${isPinDropMode ? 'pin-drop-active' : ''}`}>
+      <div className='lg:col-span-1 space-y-4'>
+        <Card>
+          <CardHeader>
+            <CardTitle>Route Calculator</CardTitle>
+            <CardDescription>Select a destination, search, or drop a pin on the map.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleCalculate} className='grid gap-4'>
+              <div className='space-y-1'>
+                <Label htmlFor='destination'>Destination</Label>
+                {/* NEW: Searchable Combobox for destinations */}
+                <Popover open={isComboboxOpen} onOpenChange={setIsComboboxOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant='outline'
+                      role='combobox'
+                      aria-expanded={isComboboxOpen}
+                      className='w-full justify-between'
+                    >
+                      {destination
+                        ? (customLocation && customLocation.name === destination
+                            ? customLocation.name
+                            : destinations.find((d) => d.name === destination)?.name) || 'Select a destination'
+                        : 'Select a destination...'}
+                      <ChevronsUpDown className='ml-2 h-4 w-4 shrink-0 opacity-50' />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className='w-[--radix-popover-trigger-width] p-0'>
+                    <Command>
+                      <CommandInput placeholder='Search destination...' />
+                      <CommandList>
+                        <CommandEmpty>No destination found.</CommandEmpty>
+                        <CommandGroup>
+                          {customLocation && (
+                            <CommandItem
+                              value={customLocation.name}
+                              onSelect={(currentValue) => {
+                                setDestination(currentValue === destination ? '' : currentValue)
+                                setIsComboboxOpen(false)
+                              }}
+                            >
+                              <Check
+                                className={cn('mr-2 h-4 w-4', destination === customLocation.name ? 'opacity-100' : 'opacity-0')}
+                              />
+                              {customLocation.name}
+                            </CommandItem>
+                          )}
+                          {destinations.map((d) => (
+                            <CommandItem key={d.name} value={d.name} onSelect={() => handleDestinationSelect(d.name)}>
+                              <Check className={cn('mr-2 h-4 w-4', destination === d.name ? 'opacity-100' : 'opacity-0')} />
+                              {d.name} ({d.miles} mi)
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div className='space-y-1'>
+                <Label htmlFor='tolls'>Tolls ($)</Label>
+                <Input
+                  id='tolls'
+                  type='number'
+                  step='0.01'
+                  value={tolls}
+                  onChange={(e) => setTolls(parseFloat(e.target.value) || 0)}
+                />
+              </div>
+              <div className='space-y-1'>
+                <Label htmlFor='extras'>Extras ($)</Label>
+                <Input
+                  id='extras'
+                  type='number'
+                  step='0.01'
+                  value={extras}
+                  onChange={(e) => setExtras(parseFloat(e.target.value) || 0)}
+                />
+              </div>
+              <div className='flex items-center gap-2'>
+                <Button type='submit' disabled={isLoading || !destination} className='flex-1'>
+                  {isLoading ? 'Calculating...' : 'Calculate Fee'}
+                </Button>
+                <Button type='button' variant='outline' onClick={handleClear}>
+                  Clear
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+
+        {error && <p className='text-sm text-red-500'>{error}</p>}
+
+        {/* ===== IMPROVED FEE BREAKDOWN CARD ===== */}
+        {feeDetails && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Fee Breakdown</CardTitle>
+              <CardDescription>An estimate based on the selected route and inputs.</CardDescription>
+            </CardHeader>
+            <CardContent className='space-y-4'>
+              {/* Route Details */}
+              <div className='space-y-2 text-sm'>
+                <div className='flex justify-between'>
+                  <span className='text-muted-foreground'>Round Trip Distance</span>
+                  <span className='font-medium'>{feeDetails.roundTripMiles.toFixed(1)} miles</span>
+                </div>
+                <div className='flex justify-between'>
+                  <span className='text-muted-foreground'>Estimated Drive Time</span>
+                  <span className='font-medium'>{feeDetails.estHours.toFixed(2)} hours</span>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Cost Breakdown */}
+              <div className='space-y-2 text-sm'>
+                <div className='flex justify-between'>
+                  <span className='text-muted-foreground'>Labor Cost</span>
+                  <span>${feeDetails.laborCost.toFixed(2)}</span>
+                </div>
+                <div className='flex justify-between'>
+                  <span className='text-muted-foreground'>Gas Cost</span>
+                  <span>${feeDetails.gasCost.toFixed(2)}</span>
+                </div>
+                <div className='flex justify-between'>
+                  <span className='text-muted-foreground'>Tolls & Extras</span>
+                  <span>${feeDetails.tollsAndExtras.toFixed(2)}</span>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Totals */}
+              <div className='space-y-3'>
+                <div className='flex justify-between text-sm font-semibold'>
+                  <span>Subtotal</span>
+                  <span>${feeDetails.subtotal.toFixed(2)}</span>
+                </div>
+                <div className='flex justify-between items-center rounded-lg bg-muted p-3'>
+                  <span className='text-lg font-bold'>Suggested Fee</span>
+                  <span className='text-2xl font-extrabold text-primary'>${feeDetails.suggestedFee.toFixed(2)}</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
-      <p className='max-w-[80px] truncate text-xs font-medium capitalize text-muted-foreground'>
-        {name}
-      </p>
-    </div>
-  )
-}
 
-// ===== NEW: Tip Data and Component =====
-const salesTips = [
-  "Always listen more than you talk. You'll learn what the customer truly needs.",
-  'Know your product inside and out. Confidence comes from competence.',
-  'Follow up promptly. A quick, thoughtful follow-up can make all the difference.',
-  'Focus on building relationships, not just making a sale. Long-term trust is invaluable.',
-  'Ask open-ended questions to encourage conversation and uncover pain points.',
-  "Understand your customer's business. How can your product specifically help them succeed?",
-  'Handle objections with empathy. Acknowledge their concern before offering a solution.',
-  "Use the 'feel, felt, found' method for objections: 'I understand how you feel. Others have felt the same way. What they found was...'",
-  'Set clear goals for every sales call. What do you want to achieve?',
-  "Don't be afraid to ask for the sale. Be direct and confident.",
-]
-
-function TipPopup() {
-  const [currentTipIndex, setCurrentTipIndex] = React.useState(0)
-  const [isVisible, setIsVisible] = React.useState(true)
-
-  React.useEffect(() => {
-    const intervalId = setInterval(() => {
-      setCurrentTipIndex((prevIndex) => (prevIndex + 1) % salesTips.length)
-    }, 60000) // 60 seconds
-
-    return () => clearInterval(intervalId)
-  }, [])
-
-  if (!isVisible) {
-    return null
-  }
-
-  return (
-    <div className='fixed bottom-4 right-4 z-50 w-full max-w-xs rounded-lg border bg-card p-4 text-card-foreground shadow-lg animate-in fade-in-90 slide-in-from-bottom-10'>
-      <div className='flex items-start justify-between'>
-        <div className='flex items-center gap-2'>
-          <svg
-            xmlns='http://www.w3.org/2000/svg'
-            width='24'
-            height='24'
-            viewBox='0 0 24 24'
-            fill='none'
-            stroke='currentColor'
-            strokeWidth='2'
-            strokeLinecap='round'
-            strokeLinejoin='round'
-            className='h-6 w-6 flex-shrink-0 text-yellow-400'
-          >
-            <path d='M15 14c.2-1 .7-1.7 1.5-2.5C17.7 10.2 18 9 18 7.5a6 6 0 0 0-12 0c0 1.5.3 2.7 1.5 3.9.8.8 1.3 1.5 1.5 2.5' />
-            <path d='M9 18h6' />
-            <path d='M10 22h4' />
-          </svg>
-          <div>
-            <h4 className='font-semibold'>Sales Tip</h4>
-            <p className='mt-1 text-sm text-muted-foreground'>
-              {salesTips[currentTipIndex]}
-            </p>
-          </div>
-        </div>
-        <button
-          onClick={() => setIsVisible(false)}
-          className='-m-1 ml-2 rounded-md p-1 text-muted-foreground opacity-70 transition-opacity hover:bg-muted hover:opacity-100'
-          aria-label='Close tip'
-        >
-          <svg
-            xmlns='http://www.w3.org/2000/svg'
-            width='24'
-            height='24'
-            viewBox='0 0 24 24'
-            fill='none'
-            stroke='currentColor'
-            strokeWidth='2'
-            strokeLinecap='round'
-            strokeLinejoin='round'
-            className='h-4 w-4'
-          >
-            <path d='M18 6 6 18' />
-            <path d='m6 6 12 12' />
-          </svg>
-        </button>
+      <div className='lg:col-span-2'>
+        <LocationMap
+          destinations={destinations}
+          selected={destination}
+          customLocation={customLocation}
+          isPinDropMode={isPinDropMode}
+          onMapClick={handleMapClick}
+          onLocationFound={handleSearchLocationFound}
+          onTogglePinDrop={() => setIsPinDropMode((prev) => !prev)}
+        />
       </div>
     </div>
   )
 }
-
-// ===== Main Dashboard Component =====
-
-export default function Dashboard() {
-  const [emailStats, setEmailStats] = React.useState<{
-    processedEmotions: StatItem[]
-    processedClassifications: StatItem[]
-  }>({
-    processedEmotions: [],
-    processedClassifications: [],
-  })
-  const [isLoadingStats, setIsLoadingStats] = React.useState(true)
-  const [error, setError] = React.useState<string | null>(null)
-
-  React.useEffect(() => {
-    const fetchEmailStats = async () => {
-      setIsLoadingStats(true)
-      const { data, error } = await supabase
-        .from('emails')
-        .select('emotion, classification')
-
-      if (error) {
-        console.error('Error fetching email data:', error)
-        setError('Failed to load email statistics.')
-        setIsLoadingStats(false)
-        return
-      }
-
-      if (data) {
-        const emotionCounts: Record<string, number> = {}
-        const classificationCounts: Record<string, number> = {}
-        let validEmotionsTotal = 0
-        let validClassificationsTotal = 0
-
-        for (const email of data) {
-          if (email.emotion) {
-            emotionCounts[email.emotion] = (emotionCounts[email.emotion] || 0) + 1
-            validEmotionsTotal++
-          }
-          if (email.classification) {
-            classificationCounts[email.classification] =
-              (classificationCounts[email.classification] || 0) + 1
-            validClassificationsTotal++
-          }
-        }
-
-        setEmailStats({
-          processedEmotions: processStatsForDisplay(
-            emotionCounts,
-            validEmotionsTotal
-          ),
-          processedClassifications: processStatsForDisplay(
-            classificationCounts,
-            validClassificationsTotal
-          ),
-        })
-      }
-      setIsLoadingStats(false)
-    }
-
-    fetchEmailStats()
-  }, [])
-
-  return (
-    <>
-      <Header>
-        <TopNav links={topNav} />
-        <div className='ml-auto flex items-center space-x-4'>
-          <Search />
-          <ThemeSwitch />
-          <ProfileDropdown />
-        </div>
-      </Header>
-
-      <Main>
-        <div className='mb-2 flex items-center justify-between space-y-2'>
-          <h1 className='text-2xl font-bold tracking-tight'>Dashboard</h1>
-          <div className='flex items-center space-x-2'>
-            <Button>Download</Button>
-          </div>
-        </div>
-        <Tabs
-          orientation='vertical'
-          defaultValue='overview'
-          className='space-y-4'
-        >
-          <div className='w-full overflow-x-auto pb-2'>
-            <TabsList>
-              <TabsTrigger value='overview'>Overview</TabsTrigger>
-              <TabsTrigger value='calculator'>Fee Calculator</TabsTrigger>
-              <TabsTrigger value='chatbot'>Sales Assistant</TabsTrigger>
-            </TabsList>
-          </div>
-          <TabsContent value='overview' className='space-y-4'>
-            <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
-              <Card>
-                <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                  <CardTitle className='text-sm font-medium'>
-                    Total Revenue
-                  </CardTitle>
-                  <svg
-                    xmlns='http://www.w3.org/2000/svg'
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    strokeWidth='2'
-                    className='text-muted-foreground h-4 w-4'
-                  >
-                    <path d='M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6' />
-                  </svg>
-                </CardHeader>
-                <CardContent>
-                  <div className='text-2xl font-bold'>$45,231.89</div>
-                  <p className='text-muted-foreground text-xs'>
-                    +20.1% from last month
-                  </p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                  <CardTitle className='text-sm font-medium'>
-                    Subscriptions
-                  </CardTitle>
-                  <svg
-                    xmlns='http://www.w3.org/2000/svg'
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    strokeWidth='2'
-                    className='text-muted-foreground h-4 w-4'
-                  >
-                    <path d='M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2' />
-                    <circle cx='9' cy='7' r='4' />
-                    <path d='M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75' />
-                  </svg>
-                </CardHeader>
-                <CardContent>
-                  <div className='text-2xl font-bold'>+2350</div>
-                  <p className='text-muted-foreground text-xs'>
-                    +180.1% from last month
-                  </p>
-                </CardContent>
-              </Card>
-
-              {/* ===== Top Emotions Card (MODIFIED) ===== */}
-              <Card>
-                <CardHeader className='pb-3'>
-                  <CardTitle className='text-base'>Top Emotions</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {isLoadingStats ? (
-                    <div className='flex h-[105px] items-center justify-center'>
-                      <p className='text-sm text-muted-foreground'>
-                        Loading...
-                      </p>
-                    </div>
-                  ) : emailStats.processedEmotions.length > 0 ? (
-                    <div className='flex w-full flex-wrap items-start justify-around gap-x-2 gap-y-4'>
-                      {emailStats.processedEmotions.map((stat) => {
-                        const style = getEmotionStyle(stat.name)
-                        return (
-                          <CircularProgress
-                            key={stat.name}
-                            name={stat.name}
-                            percentage={stat.percentage}
-                            color={style.color}
-                            icon={style.icon}
-                          />
-                        )
-                      })}
-                    </div>
-                  ) : (
-                    <div className='flex h-[105px] items-center justify-center'>
-                      <p className='text-sm text-muted-foreground'>
-                        No data available.
-                      </p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* ===== Top Classifications Card (MODIFIED) ===== */}
-              <Card>
-                <CardHeader className='pb-3'>
-                  <CardTitle className='text-base'>
-                    Top Classifications
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {isLoadingStats ? (
-                    <div className='flex h-[105px] items-center justify-center'>
-                      <p className='text-sm text-muted-foreground'>
-                        Loading...
-                      </p>
-                    </div>
-                  ) : emailStats.processedClassifications.length > 0 ? (
-                    <div className='flex w-full flex-wrap items-start justify-around gap-x-2 gap-y-4'>
-                      {emailStats.processedClassifications.map((stat) => {
-                        const style = getClassificationStyle(stat.name)
-                        return (
-                          <CircularProgress
-                            key={stat.name}
-                            name={stat.name}
-                            percentage={stat.percentage}
-                            color={style.color}
-                            icon={style.icon}
-                          />
-                        )
-                      })}
-                    </div>
-                  ) : (
-                    <div className='flex h-[105px] items-center justify-center'>
-                      <p className='text-sm text-muted-foreground'>
-                        No data available.
-                      </p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-            {error && <p className='text-sm text-destructive'>{error}</p>}
-            <div className='grid grid-cols-1 gap-4 lg:grid-cols-7'>
-              <Card className='col-span-1 lg:col-span-4'>
-                <CardHeader>
-                  <CardTitle>Overview</CardTitle>
-                </CardHeader>
-                <CardContent className='pl-2'>
-                  <Overview />
-                </CardContent>
-              </Card>
-              <Card className='col-span-1 lg:col-span-3'>
-                <CardHeader>
-                  <CardTitle>Recent Sales</CardTitle>
-                  <CardDescription>
-                    You made 265 sales this month.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <RecentSales />
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-          <TabsContent value='calculator' className='space-y-4'>
-            <DeliveryFeeCalculator />
-          </TabsContent>
-          <TabsContent value='chatbot' className='space-y-4'>
-            <Chatbot />
-          </TabsContent>
-        </Tabs>
-      </Main>
-      <TipPopup />
-    </>
-  )
-}
-
-const topNav = [
-  {
-    title: 'Overview',
-    href: 'dashboard/overview',
-    isActive: true,
-    disabled: false,
-  },
-  {
-    title: 'Customers',
-    href: 'dashboard/customers',
-    isActive: false,
-    disabled: true,
-  },
-  {
-    title: 'Products',
-    href: 'dashboard/products',
-    isActive: false,
-    disabled: true,
-  },
-  {
-    title: 'Settings',
-    href: 'dashboard/settings',
-    isActive: false,
-    disabled: true,
-  },
-]
